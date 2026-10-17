@@ -1,0 +1,9 @@
+@page "/prueba-bd"
+@inject AlquilerVehiculos.Data.AlquilerDbContext Db
+<h1>Prueba de conexión</h1>
+<p>@mensaje</p>
+@code {
+    string mensaje = "Comprobando...";
+    protected override async Task OnInitializedAsync() =>
+        mensaje = await Db.Database.CanConnectAsync() ? "Conexión correcta." : "No se pudo conectar.";
+}
