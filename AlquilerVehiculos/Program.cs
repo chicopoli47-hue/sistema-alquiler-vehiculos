@@ -8,7 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-    builder.Services.AddDbContext<AlquilerDbContext>(options =>
+   builder.Services.AddDbContextFactory<AlquilerDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("AlquilerDb")));
 
 var app = builder.Build();
