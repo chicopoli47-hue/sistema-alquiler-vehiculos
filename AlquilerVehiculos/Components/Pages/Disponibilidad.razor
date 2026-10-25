@@ -1,0 +1,288 @@
+
+@page "/disponibilidad"
+@rendermode InteractiveServer
+
+@using AlquilerVehiculos.Data
+@using AlquilerVehiculos.Models
+@using Microsoft.EntityFrameworkCore
+@inject AlquilerDbContext Db
+
+<PageTitle>Disponibilidad de vehículos</PageTitle>
+
+<div class="container-fluid py-4">
+
+    <!-- Encabezado -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="fw-bold mb-1">
+                <i class="bi bi-calendar-check-fill text-primary me-2"></i>
+                Disponibilidad de vehículos
+            </h3>
+            <p class="text-muted mb-0">
+                Consulta los vehículos disponibles según la categoría y el período de alquiler.
+            </p>
+        </div>
+    </div>
+
+    <!-- Formulario de consulta -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-semibold">
+                <i class="bi bi-search me-2 text-primary"></i>
+                Consultar disponibilidad
+            </h5>
+        </div>
+
+        <div class="card-body p-4">
+            <div class="row g-3">
+
+                <div class="col-12 col-md-6 col-lg-4">
+                    <label class="form-label fw-semibold">Categoría</label>
+                    <select class="form-select" @bind="IdCategoriaSeleccionada">
+                        <option value="0">Seleccione una categoría</option>
+                        @foreach (var categoria in Categorias)
+                        {
+                            <option value="@categoria.IdCategoria">
+                                @categoria.Nombre
+                            </option>
+                        }
+                    </select>
+                </div>
+
+                <div class="col-12 col-md-6 col-lg-3">
+                    <label class="form-label fw-semibold">Fecha de inicio</label>
+                    <input type="date"
+                           class="form-control"
+                           @bind="FechaInicio" />
+                </div>
+
+                <div class="col-12 col-md-6 col-lg-3">
+                    <label class="form-label fw-semibold">Fecha de fin</label>
+                    <input type="date"
+                           class="form-control"
+                           @bind="FechaFin" />
+                </div>
+
+                <div class="col-12 col-md-6 col-lg-2 d-flex align-items-end">
+                    <button type="button"
+                            class="btn btn-primary w-100"
+                            @onclick="ConsultarAsync">
+                        <i class="bi bi-search me-2"></i>
+                        Consultar
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Mensaje de consulta -->
+    @if (!string.IsNullOrWhiteSpace(Mensaje))
+    {
+        <div class="alert @(Consultado && VehiculosDisponibles.Count > 0 ? "alert-success" : "alert-info") d-flex align-items-center shadow-sm"
+             role="alert">
+            <i class="bi @(Consultado && VehiculosDisponibles.Count > 0 ? "bi-check-circle-fill" : "bi-info-circle-fill") me-2"></i>
+            <div>@Mensaje</div>
+        </div>
+    }
+
+    <!-- Resultados -->
+    @if (Consultado)
+    {
+        <div class="card border-0 shadow-sm">
+
+            <div class="card-header bg-white py-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h5 class="mb-0 fw-semibold">
+                        <i class="bi bi-car-front-fill text-primary me-2"></i>
+                        Resultados de la consulta
+                    </h5>
+
+                    <span class="badge bg-primary rounded-pill px-3 py-2">
+                        @VehiculosDisponibles.Count disponibles
+                    </span>
+                </div>
+            </div>
+
+            @if (VehiculosDisponibles.Count > 0)
+            {
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="px-4">Matrícula</th>
+                                    <th>Marca</th>
+                                    <th>Modelo</th>
+                                    <th>Año</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                @foreach (var vehiculo in VehiculosDisponibles)
+                                {
+                                    <tr>
+                                        <td class="px-4 fw-semibold">
+                                            @vehiculo.Matricula
+                                        </td>
+                                        <td>@vehiculo.Marca</td>
+                                        <td>@vehiculo.Modelo</td>
+                                        <td>@vehiculo.Anio</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-car-front text-secondary"
+                       style="font-size: 3rem;"></i>
+
+                    <h5 class="mt-3 mb-2">No hay vehículos disponibles</h5>
+
+                    <p class="text-muted mb-0">
+                        No se encontraron vehículos para la categoría y las fechas seleccionadas.
+                        Prueba con otro período o categoría.
+                    </p>
+                </div>
+            }
+
+        </div>
+    }
+
+</div>
+
+@code {
+    private List<Categoria> Categorias = new();
+    private List<Vehiculo> VehiculosDisponibles = new();
+
+    private int IdCategoriaSeleccionada;
+    private DateOnly FechaInicio = DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly FechaFin = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+
+    private bool Consultado;
+    private string Mensaje = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Categorias = await Db.Categoria
+            .AsNoTracking()
+            .OrderBy(c => c.Nombre)
+            .ToListAsync();
+    }
+
+    private async Task ConsultarAsync()
+    {
+        Mensaje = "";
+        VehiculosDisponibles.Clear();
+        Consultado = false;
+
+        if (IdCategoriaSeleccionada <= 0)
+        {
+            Mensaje = "Seleccione una categoría.";
+            return;
+        }
+
+        if (FechaFin <= FechaInicio)
+        {
+            Mensaje = "La fecha de fin debe ser posterior a la fecha de inicio.";
+            return;
+        }
+
+        // Convertir las fechas de la pantalla a DateTime.
+        var inicio = FechaInicio.ToDateTime(TimeOnly.MinValue);
+        var fin = FechaFin.ToDateTime(TimeOnly.MinValue);
+
+        // Obtener los vehículos activos de la categoría.
+        var vehiculos = await Db.Vehiculo
+            .AsNoTracking()
+            .Where(v => v.IdCategoria == IdCategoriaSeleccionada
+                     && v.Estado == "activo")
+            .ToListAsync();
+
+        // Obtener las reservas confirmadas que se cruzan con el período.
+        var reservas = await Db.Reserva
+            .AsNoTracking()
+            .Where(r => r.IdCategoria == IdCategoriaSeleccionada
+                     && r.Estado == "confirmada"
+                     && r.FechaInicio < fin
+                     && r.FechaFin > inicio
+                     && r.Contrato == null)
+            .Select(r => r.IdVehiculo)
+            .ToListAsync();
+
+        // Obtener los vehículos con contratos abiertos durante el período.
+        var contratos = await Db.Contrato
+            .AsNoTracking()
+            .Where(c => c.Estado == "abierto"
+                     && c.FechaInicio < fin
+                     && c.FechaFinPactada > inicio)
+            .Select(c => c.IdVehiculo)
+            .ToListAsync();
+
+        // Obtener los mantenimientos en curso.
+        var mantenimientos = await Db.Mantenimiento
+            .AsNoTracking()
+            .Where(m => m.Estado == "en_curso")
+            .Select(m => new
+            {
+                m.IdVehiculo,
+                m.FechaInicio,
+                m.FechaFin
+            })
+            .ToListAsync();
+
+        // Identificar los mantenimientos que se cruzan con el período.
+        var idsMantenimiento = mantenimientos
+            .Where(m =>
+                m.FechaInicio.ToDateTime(TimeOnly.MinValue) < fin
+                && (!m.FechaFin.HasValue
+                    || m.FechaFin.Value >= FechaInicio))
+            .Select(m => m.IdVehiculo)
+            .ToList();
+
+        // Unir los vehículos ocupados por reservas, contratos o mantenimiento.
+        var idsOcupados = reservas
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Concat(contratos)
+            .Concat(idsMantenimiento)
+            .ToHashSet();
+
+        // Conservar solamente los vehículos que no están ocupados.
+        var libres = vehiculos
+            .Where(v => !idsOcupados.Contains(v.IdVehiculo))
+            .OrderBy(v => v.Marca)
+            .ThenBy(v => v.Modelo)
+            .ToList();
+
+        // Contar las reservas confirmadas que aún no tienen vehículo asignado.
+        var reservasSinVehiculo = await Db.Reserva
+            .AsNoTracking()
+            .CountAsync(r => r.IdCategoria == IdCategoriaSeleccionada
+                          && r.Estado == "confirmada"
+                          && r.IdVehiculo == null
+                          && r.Contrato == null
+                          && r.FechaInicio < fin
+                          && r.FechaFin > inicio);
+
+        // Las reservas sin vehículo también reducen la capacidad de la categoría.
+        var cantidadDisponible = Math.Max(
+            0,
+            libres.Count - reservasSinVehiculo
+        );
+
+        VehiculosDisponibles = libres
+            .Take(cantidadDisponible)
+            .ToList();
+
+        Consultado = true;
+
+        Mensaje = VehiculosDisponibles.Count == 0
+            ? "No hay vehículos disponibles para la categoría y las fechas seleccionadas."
+            : $"Se encontraron {VehiculosDisponibles.Count} vehículos disponibles.";
+    }
+}

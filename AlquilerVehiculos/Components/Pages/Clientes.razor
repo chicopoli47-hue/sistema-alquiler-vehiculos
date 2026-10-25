@@ -1,0 +1,624 @@
+@page "/clientes"
+@rendermode InteractiveServer
+
+@using AlquilerVehiculos.Models
+@using AlquilerVehiculos.Data
+@using Microsoft.EntityFrameworkCore
+
+@inject AlquilerDbContext Db
+
+<PageTitle>Gestión de clientes</PageTitle>
+
+<div class="container-fluid py-4">
+
+    <div class="mb-4">
+        <h1 class="h3 fw-bold mb-1">
+            <i class="bi bi-people-fill text-primary me-2"></i>
+            Gestión de clientes
+        </h1>
+        <p class="text-secondary mb-0">
+            Administración y registro de clientes del sistema.
+        </p>
+    </div>
+
+    @if (!string.IsNullOrEmpty(mensaje))
+    {
+        <div class="alert alert-info shadow-sm border-0 rounded-3">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            @mensaje
+        </div>
+    }
+
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+        <div class="card-header bg-white border-0 px-4 pt-4">
+            <h2 class="h5 fw-bold mb-1">
+                @if (clienteEditandoId.HasValue)
+                {
+                    <i class="bi bi-pencil-square text-primary me-2"></i>
+                    <span>Modificar cliente</span>
+                }
+                else
+                {
+                    <i class="bi bi-person-plus-fill text-primary me-2"></i>
+                    <span>Registrar cliente</span>
+                }
+            </h2>
+            <p class="text-secondary small mb-0">
+                Complete los datos solicitados.
+            </p>
+        </div>
+
+        <div class="card-body p-4">
+            <EditForm Model="@formulario"
+                      OnValidSubmit="GuardarCliente"
+                      FormName="FormularioCliente">
+
+                <DataAnnotationsValidator />
+
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-semibold">Nombre</label>
+                        <InputText class="form-control"
+                                   @bind-Value="formulario.Nombre" />
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-semibold">Apellido</label>
+                        <InputText class="form-control"
+                                   @bind-Value="formulario.Apellido" />
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-semibold">
+                            <i class="bi bi-telephone me-1 text-secondary"></i>
+                            Teléfono
+                        </label>
+                        <InputText class="form-control"
+                                   @bind-Value="formulario.Telefono" />
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-semibold">
+                            <i class="bi bi-person-vcard me-1 text-secondary"></i>
+                            Cédula o documento
+                        </label>
+                        <InputText class="form-control"
+                                   @bind-Value="formulario.Documento" />
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-semibold">
+                            <i class="bi bi-card-text me-1 text-secondary"></i>
+                            Número de licencia
+                        </label>
+                        <InputText class="form-control"
+                                   @bind-Value="formulario.LicenciaNumero" />
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-semibold">
+                            <i class="bi bi-calendar-event me-1 text-secondary"></i>
+                            Vencimiento de la licencia
+                        </label>
+                        <InputDate class="form-control"
+                                   @bind-Value="formulario.LicenciaVencimiento" />
+                    </div>
+                </div>
+
+                <hr class="my-4" />
+
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="submit"
+                            class="btn btn-primary px-4"
+                            disabled="@guardando">
+
+                        @if (guardando)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"
+                                  aria-hidden="true"></span>
+                            <span>Guardando...</span>
+                        }
+                        else if (clienteEditandoId.HasValue)
+                        {
+                            <i class="bi bi-check-circle me-2"></i>
+                            <span>Guardar cambios</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-person-plus-fill me-2"></i>
+                            <span>Guardar cliente</span>
+                        }
+                    </button>
+
+                    @if (clienteEditandoId.HasValue)
+                    {
+                        <button type="button"
+                                class="btn btn-outline-secondary px-4"
+                                @onclick="CancelarEdicion"
+                                disabled="@guardando">
+                            <i class="bi bi-x-circle me-2"></i>
+                            Cancelar
+                        </button>
+                    }
+                </div>
+            </EditForm>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-3">
+        <div class="card-header bg-white border-0 p-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h2 class="h5 fw-bold mb-1">
+                        <i class="bi bi-card-list text-primary me-2"></i>
+                        Clientes registrados
+                    </h2>
+                    <p class="text-secondary small mb-0">
+                        Listado de clientes y sus estados actuales.
+                    </p>
+                </div>
+
+                <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2">
+                    <i class="bi bi-people me-1"></i>
+                    Total: @clientes.Count
+                </span>
+            </div>
+        </div>
+
+        <div class="card-body p-0">
+            @if (cargando)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                    <p class="text-secondary mt-3 mb-0">
+                        Cargando clientes...
+                    </p>
+                </div>
+            }
+            else if (clientes.Count == 0)
+            {
+                <div class="text-center py-5">
+                    <i class="bi bi-people display-4 text-secondary"></i>
+                    <p class="fw-semibold mt-3 mb-1">
+                        No hay clientes registrados.
+                    </p>
+                    <p class="text-secondary small mb-0">
+                        Los clientes registrados aparecerán en esta tabla.
+                    </p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="px-3 py-3">Nombre</th>
+                                <th class="py-3">Apellido</th>
+                                <th class="py-3">Documento</th>
+                                <th class="py-3">Teléfono</th>
+                                <th class="py-3">Licencia</th>
+                                <th class="py-3">Vencimiento</th>
+                                <th class="py-3">Estado</th>
+                                <th class="py-3 text-center">Acciones</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            @foreach (var cliente in clientes)
+                            {
+                                <tr>
+                                    <td class="px-3 fw-semibold">
+                                        @cliente.Nombre
+                                    </td>
+                                    <td>@cliente.Apellido</td>
+                                    <td>@cliente.Documento</td>
+                                    <td>
+                                        <i class="bi bi-telephone text-secondary me-1"></i>
+                                        @cliente.Telefono
+                                    </td>
+                                    <td>@cliente.LicenciaNumero</td>
+                                    <td>
+                                        @cliente.LicenciaVencimiento.ToString("dd/MM/yyyy")
+                                    </td>
+                                    <td>
+                                        @if (cliente.Estado == "activo")
+                                        {
+                                            <span class="badge rounded-pill bg-success-subtle text-success px-3 py-2">
+                                                <i class="bi bi-check-circle-fill me-1"></i>
+                                                @cliente.Estado
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge rounded-pill bg-secondary-subtle text-secondary px-3 py-2">
+                                                <i class="bi bi-person-slash me-1"></i>
+                                                @cliente.Estado
+                                            </span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="d-flex justify-content-center flex-wrap gap-2">
+                                            <button type="button"
+                                                    class="btn btn-outline-primary btn-sm"
+                                                    @onclick="() => EditarCliente(cliente.IdCliente)"
+                                                    disabled="@guardando">
+                                                <i class="bi bi-pencil-square me-1"></i>
+                                                Editar
+                                            </button>
+
+                                            @if (cliente.Estado == "activo")
+                                            {
+                                                <button type="button"
+                                                        class="btn btn-outline-danger btn-sm"
+                                                        @onclick="() => DesactivarCliente(cliente.IdCliente)"
+                                                        disabled="@guardando">
+                                                    <i class="bi bi-person-dash me-1"></i>
+                                                    Desactivar
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <button type="button"
+                                                        class="btn btn-outline-success btn-sm"
+                                                        @onclick="() => ActivarCliente(cliente.IdCliente)"
+                                                        disabled="@guardando">
+                                                    <i class="bi bi-person-check me-1"></i>
+                                                    Activar
+                                                </button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<Cliente> clientes = new();
+    private ClienteFormulario formulario = new();
+
+    private string mensaje = "";
+    private bool cargando = true;
+    private bool guardando = false;
+    private int? clienteEditandoId = null;
+
+    // Evita que un mensaje anterior borre uno más reciente.
+    private int versionMensaje = 0;
+
+    private class ClienteFormulario
+    {
+        public string Nombre { get; set; } = "";
+        public string Apellido { get; set; } = "";
+        public string Telefono { get; set; } = "";
+        public string Documento { get; set; } = "";
+        public string LicenciaNumero { get; set; } = "";
+
+        public DateOnly LicenciaVencimiento { get; set; }
+            = DateOnly.FromDateTime(DateTime.Today);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarClientes();
+    }
+
+    private async Task MostrarMensajeTemporal(string texto)
+    {
+        int versionActual = ++versionMensaje;
+        mensaje = texto;
+
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(3000);
+
+        if (versionActual == versionMensaje)
+        {
+            mensaje = "";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void MostrarMensaje(string texto)
+    {
+        versionMensaje++;
+        mensaje = texto;
+    }
+
+    private async Task CargarClientes()
+    {
+        try
+        {
+            clientes = await Db.Cliente
+                .AsNoTracking()
+                .OrderBy(c => c.Apellido)
+                .ThenBy(c => c.Nombre)
+                .ToListAsync();
+        }
+        catch (Exception)
+        {
+            MostrarMensaje(
+                "No se pudieron cargar los clientes. Verifica la conexión con la base de datos.");
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task EditarCliente(int id)
+    {
+        MostrarMensaje("");
+
+        try
+        {
+            var cliente = await Db.Cliente
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.IdCliente == id);
+
+            if (cliente == null)
+            {
+                MostrarMensaje("No se encontró el cliente seleccionado.");
+                return;
+            }
+
+            formulario = new ClienteFormulario
+            {
+                Nombre = cliente.Nombre,
+                Apellido = cliente.Apellido,
+                Telefono = cliente.Telefono,
+                Documento = cliente.Documento,
+                LicenciaNumero = cliente.LicenciaNumero,
+                LicenciaVencimiento = cliente.LicenciaVencimiento
+            };
+
+            clienteEditandoId = cliente.IdCliente;
+
+            MostrarMensaje("Modifica los datos y pulsa Guardar cambios.");
+        }
+        catch (Exception)
+        {
+            MostrarMensaje("No se pudieron cargar los datos del cliente.");
+        }
+    }
+
+    private async Task GuardarCliente()
+    {
+        if (guardando)
+            return;
+
+        MostrarMensaje("");
+
+        if (string.IsNullOrWhiteSpace(formulario.Nombre))
+        {
+            MostrarMensaje("El nombre es obligatorio.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(formulario.Apellido))
+        {
+            MostrarMensaje("El apellido es obligatorio.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(formulario.Telefono))
+        {
+            MostrarMensaje("El teléfono es obligatorio.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(formulario.Documento))
+        {
+            MostrarMensaje("El documento es obligatorio.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(formulario.LicenciaNumero))
+        {
+            MostrarMensaje("El número de licencia es obligatorio.");
+            return;
+        }
+
+        guardando = true;
+
+        try
+        {
+            string documento = formulario.Documento.Trim();
+
+            bool documentoExiste;
+
+            if (clienteEditandoId.HasValue)
+            {
+                documentoExiste = await Db.Cliente.AnyAsync(c =>
+                    c.Documento == documento &&
+                    c.IdCliente != clienteEditandoId.Value);
+            }
+            else
+            {
+                documentoExiste = await Db.Cliente.AnyAsync(c =>
+                    c.Documento == documento);
+            }
+
+            if (documentoExiste)
+            {
+                MostrarMensaje("Ya existe otro cliente con ese documento.");
+                return;
+            }
+
+            string mensajeExito;
+
+            if (clienteEditandoId.HasValue)
+            {
+                var cliente = await Db.Cliente
+                    .FirstOrDefaultAsync(c =>
+                        c.IdCliente == clienteEditandoId.Value);
+
+                if (cliente == null)
+                {
+                    MostrarMensaje("El cliente ya no existe en la base de datos.");
+                    return;
+                }
+
+                cliente.Nombre = formulario.Nombre.Trim();
+                cliente.Apellido = formulario.Apellido.Trim();
+                cliente.Telefono = formulario.Telefono.Trim();
+                cliente.Documento = documento;
+                cliente.LicenciaNumero = formulario.LicenciaNumero.Trim();
+                cliente.LicenciaVencimiento = formulario.LicenciaVencimiento;
+
+                await Db.SaveChangesAsync();
+
+                mensajeExito = "Cliente modificado correctamente.";
+            }
+            else
+            {
+                var nuevoCliente = new Cliente
+                {
+                    Nombre = formulario.Nombre.Trim(),
+                    Apellido = formulario.Apellido.Trim(),
+                    Telefono = formulario.Telefono.Trim(),
+                    Documento = documento,
+                    LicenciaNumero = formulario.LicenciaNumero.Trim(),
+                    LicenciaVencimiento = formulario.LicenciaVencimiento,
+                    Estado = "activo",
+                    FechaRegistro = DateTime.Now
+                };
+
+                Db.Cliente.Add(nuevoCliente);
+                await Db.SaveChangesAsync();
+
+                mensajeExito = "Cliente registrado correctamente.";
+            }
+
+            // Regresa el formulario al modo de registro.
+            formulario = new ClienteFormulario();
+            clienteEditandoId = null;
+
+            await CargarClientes();
+            await MostrarMensajeTemporal(mensajeExito);
+        }
+        catch (DbUpdateException)
+        {
+            MostrarMensaje(
+                "No se pudieron guardar los cambios. Comprueba que el documento no esté repetido y que los datos sean correctos.");
+        }
+        catch (Exception)
+        {
+            MostrarMensaje(
+                "Ocurrió un error al guardar. Revisa la conexión con la base de datos.");
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private async Task DesactivarCliente(int id)
+    {
+        if (guardando)
+            return;
+
+        MostrarMensaje("");
+        guardando = true;
+
+        try
+        {
+            var cliente = await Db.Cliente
+                .FirstOrDefaultAsync(c => c.IdCliente == id);
+
+            if (cliente == null)
+            {
+                MostrarMensaje("No se encontró el cliente.");
+                return;
+            }
+
+            if (cliente.Estado != "activo")
+            {
+                MostrarMensaje("El cliente ya está inactivo.");
+                return;
+            }
+
+            cliente.Estado = "inactivo";
+
+            await Db.SaveChangesAsync();
+
+            if (clienteEditandoId == id)
+            {
+                formulario = new ClienteFormulario();
+                clienteEditandoId = null;
+            }
+
+            await CargarClientes();
+
+            await MostrarMensajeTemporal(
+                "Cliente desactivado correctamente.");
+        }
+        catch (Exception)
+        {
+            MostrarMensaje(
+                "No se pudo desactivar el cliente. Revisa la conexión con la base de datos.");
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private async Task ActivarCliente(int id)
+    {
+        if (guardando)
+            return;
+
+        MostrarMensaje("");
+        guardando = true;
+
+        try
+        {
+            var cliente = await Db.Cliente
+                .FirstOrDefaultAsync(c => c.IdCliente == id);
+
+            if (cliente == null)
+            {
+                MostrarMensaje("No se encontró el cliente.");
+                return;
+            }
+
+            if (cliente.Estado == "activo")
+            {
+                MostrarMensaje("El cliente ya está activo.");
+                return;
+            }
+
+            cliente.Estado = "activo";
+
+            await Db.SaveChangesAsync();
+
+            await CargarClientes();
+
+            await MostrarMensajeTemporal(
+                "Cliente activado correctamente.");
+        }
+        catch (Exception)
+        {
+            MostrarMensaje(
+                "No se pudo activar el cliente. Revisa la conexión con la base de datos.");
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private void CancelarEdicion()
+    {
+        formulario = new ClienteFormulario();
+        clienteEditandoId = null;
+        MostrarMensaje("Edición cancelada.");
+    }
+}

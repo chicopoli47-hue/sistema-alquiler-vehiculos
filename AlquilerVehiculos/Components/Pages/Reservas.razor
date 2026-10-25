@@ -1,0 +1,901 @@
+@page "/reservas"
+@rendermode InteractiveServer
+
+@using Microsoft.EntityFrameworkCore
+@using AlquilerVehiculos.Models
+@using AlquilerVehiculos.Data
+
+@inject AlquilerDbContext Db
+
+<PageTitle>Gestión de reservas</PageTitle>
+
+<div class="container-fluid py-4">
+
+    <div class="mb-4">
+        <h1 class="h3 fw-bold mb-1">
+            <i class="bi bi-calendar-check-fill text-primary me-2"></i>
+            Gestión de reservas
+        </h1>
+        <p class="text-secondary mb-0">
+            Registro, consulta, modificación y cancelación de reservas.
+        </p>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(mensaje))
+    {
+        <div class="alert @(mensajeError ? "alert-danger" : "alert-success") shadow-sm border-0 rounded-3" role="alert">
+            <i class="bi @(mensajeError ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill") me-2"></i>
+            @mensaje
+        </div>
+    }
+
+    @if (Cargando)
+    {
+        <div class="card border-0 shadow-sm rounded-3">
+            <div class="card-body text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Cargando...</span>
+                </div>
+                <p class="text-secondary mt-3 mb-0">
+                    Cargando información de reservas...
+                </p>
+            </div>
+        </div>
+    }
+    else
+    {
+        @if (clientes.Count == 0 ||
+             categorias.Count == 0 ||
+             sucursales.Count == 0 ||
+             usuarios.Count == 0)
+        {
+            <div class="alert alert-warning border-0 shadow-sm rounded-3" role="alert">
+                <div class="d-flex align-items-start">
+                    <i class="bi bi-exclamation-triangle-fill me-2 mt-1"></i>
+                    <div>
+                        <strong>Faltan datos para registrar reservas.</strong>
+                        <p class="mb-1">
+                            Debes tener al menos un cliente activo, una categoría,
+                            una sucursal activa y un usuario activo.
+                        </p>
+                        <p class="mb-0">
+                            También necesitas vehículos activos en la categoría seleccionada.
+                            Cuando agregues los datos que faltan, podrás registrar reservas.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div class="card border-0 shadow-sm rounded-3 mb-4">
+            <div class="card-header bg-white border-0 px-4 pt-4">
+                <h2 class="h5 fw-bold mb-1">
+                    @if (formulario.IdReserva == 0)
+                    {
+                        <i class="bi bi-calendar-plus text-primary me-2"></i>
+                        <span>Registrar reserva</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-pencil-square text-primary me-2"></i>
+                        <span>Modificar reserva</span>
+                    }
+                </h2>
+                <p class="text-secondary small mb-0">
+                    Complete los datos solicitados para gestionar la reserva.
+                </p>
+            </div>
+
+            <div class="card-body p-4">
+                <EditForm Model="formulario" OnValidSubmit="GuardarReservaAsync">
+                    <div class="row g-3">
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">
+                                Cliente <span class="text-danger">*</span>
+                            </label>
+                            <InputSelect class="form-select" @bind-Value="formulario.IdCliente">
+                                <option value="0">Seleccione un cliente</option>
+                                @foreach (var cliente in clientes.Where(c =>
+                                    string.Equals(c.Estado, "activo",
+                                    StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    <option value="@cliente.IdCliente">
+                                        @cliente.Nombre @cliente.Apellido — @cliente.Documento
+                                    </option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">
+                                Categoría <span class="text-danger">*</span>
+                            </label>
+                            <InputSelect class="form-select"
+                                         @bind-Value="formulario.IdCategoria"
+                                         @bind-Value:after="ActualizarVehiculosDisponiblesAsync">
+                                <option value="0">Seleccione una categoría</option>
+                                @foreach (var categoria in categorias)
+                                {
+                                    <option value="@categoria.IdCategoria">
+                                        @categoria.Nombre
+                                    </option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">
+                                Sucursal <span class="text-danger">*</span>
+                            </label>
+                            <InputSelect class="form-select" @bind-Value="formulario.IdSucursal">
+                                <option value="0">Seleccione una sucursal</option>
+                                @foreach (var sucursal in sucursales.Where(s => s.Activa))
+                                {
+                                    <option value="@sucursal.IdSucursal">
+                                        @sucursal.Nombre
+                                    </option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">
+                                Usuario que registra <span class="text-danger">*</span>
+                            </label>
+                            <InputSelect class="form-select" @bind-Value="formulario.IdUsuario">
+                                <option value="0">Seleccione un usuario</option>
+                                @foreach (var usuario in usuarios.Where(u => u.Activo))
+                                {
+                                    <option value="@usuario.IdUsuario">
+                                        @usuario.NombreCompleto
+                                    </option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-calendar-event text-secondary me-1"></i>
+                                Fecha de inicio <span class="text-danger">*</span>
+                            </label>
+                            <InputDate class="form-control"
+                                       @bind-Value="formulario.FechaInicio"
+                                       @bind-Value:after="ActualizarVehiculosDisponiblesAsync" />
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-calendar-event text-secondary me-1"></i>
+                                Fecha de finalización <span class="text-danger">*</span>
+                            </label>
+                            <InputDate class="form-control"
+                                       @bind-Value="formulario.FechaFin"
+                                       @bind-Value:after="ActualizarVehiculosDisponiblesAsync" />
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-car-front text-secondary me-1"></i>
+                                Vehículo específico (opcional)
+                            </label>
+                            <InputSelect class="form-select" @bind-Value="formulario.IdVehiculo">
+                                <option value="">Sin asignar vehículo</option>
+                                @foreach (var vehiculo in vehiculosDisponibles)
+                                {
+                                    <option value="@vehiculo.IdVehiculo">
+                                        @vehiculo.Matricula — @vehiculo.Marca @vehiculo.Modelo
+                                    </option>
+                                }
+                            </InputSelect>
+                            <div class="form-text">
+                                Los vehículos se filtran por categoría, fechas y disponibilidad.
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Observaciones</label>
+                            <InputTextArea class="form-control"
+                                           @bind-Value="formulario.Observaciones"
+                                           maxlength="300"
+                                           rows="3" />
+                        </div>
+
+                    </div>
+
+                    <hr class="my-4" />
+
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="submit"
+                                class="btn btn-primary px-4"
+                                disabled="@Guardando">
+                            @if (Guardando)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"
+                                      aria-hidden="true"></span>
+                                <span>Guardando...</span>
+                            }
+                            else if (formulario.IdReserva == 0)
+                            {
+                                <i class="bi bi-calendar-plus me-2"></i>
+                                <span>Registrar reserva</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-check-circle me-2"></i>
+                                <span>Guardar cambios</span>
+                            }
+                        </button>
+
+                        @if (formulario.IdReserva != 0)
+                        {
+                            <button type="button"
+                                    class="btn btn-outline-secondary px-4"
+                                    @onclick="CancelarEdicion"
+                                    disabled="@Guardando">
+                                <i class="bi bi-x-circle me-2"></i>
+                                Cancelar edición
+                            </button>
+                        }
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm rounded-3">
+            <div class="card-header bg-white border-0 p-4">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <h2 class="h5 fw-bold mb-1">
+                            <i class="bi bi-card-list text-primary me-2"></i>
+                            Reservas registradas
+                        </h2>
+                        <p class="text-secondary small mb-0">
+                            Consulta el estado y los datos de las reservas registradas.
+                        </p>
+                    </div>
+
+                    <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2">
+                        <i class="bi bi-calendar-check me-1"></i>
+                        Total: @reservas.Count
+                    </span>
+                </div>
+            </div>
+
+            <div class="card-body p-0">
+                @if (reservas.Count == 0)
+                {
+                    <div class="text-center py-5">
+                        <i class="bi bi-calendar-x display-4 text-secondary"></i>
+                        <p class="fw-semibold mt-3 mb-1">
+                            No hay reservas registradas.
+                        </p>
+                        <p class="text-secondary small mb-0">
+                            Las reservas que registres aparecerán en esta tabla.
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="px-3 py-3">N.º</th>
+                                    <th class="py-3">Cliente</th>
+                                    <th class="py-3">Categoría</th>
+                                    <th class="py-3">Vehículo</th>
+                                    <th class="py-3">Sucursal</th>
+                                    <th class="py-3">Inicio</th>
+                                    <th class="py-3">Fin</th>
+                                    <th class="py-3">Estado</th>
+                                    <th class="py-3 text-center">Acciones</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                @foreach (var reserva in reservas)
+                                {
+                                    <tr>
+                                        <td class="px-3 fw-semibold">
+                                            @reserva.IdReserva
+                                        </td>
+
+                                        <td>
+                                            <div class="fw-semibold">
+                                                @reserva.IdClienteNavigation.Nombre
+                                                @reserva.IdClienteNavigation.Apellido
+                                            </div>
+                                        </td>
+
+                                        <td>
+                                            @reserva.IdCategoriaNavigation.Nombre
+                                        </td>
+
+                                        <td>
+                                            @if (reserva.IdVehiculoNavigation is not null)
+                                            {
+                                                @($"{reserva.IdVehiculoNavigation.Marca} {reserva.IdVehiculoNavigation.Modelo} — {reserva.IdVehiculoNavigation.Matricula}")
+                                            }
+                                            else
+                                            {
+                                                <span class="text-secondary fst-italic">
+                                                    Por asignar
+                                                </span>
+                                            }
+                                        </td>
+
+                                        <td>
+                                            @reserva.IdSucursalNavigation.Nombre
+                                        </td>
+
+                                        <td>
+                                            @reserva.FechaInicio.ToString("dd/MM/yyyy")
+                                        </td>
+
+                                        <td>
+                                            @reserva.FechaFin.ToString("dd/MM/yyyy")
+                                        </td>
+
+                                        <td>
+                                            @if (reserva.Estado == "cancelada")
+                                            {
+                                                <span class="badge rounded-pill bg-danger-subtle text-danger px-3 py-2">
+                                                    <i class="bi bi-x-circle-fill me-1"></i>
+                                                    @reserva.Estado
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge rounded-pill bg-success-subtle text-success px-3 py-2">
+                                                    <i class="bi bi-check-circle-fill me-1"></i>
+                                                    @reserva.Estado
+                                                </span>
+                                            }
+                                        </td>
+
+                                        <td>
+                                            <div class="d-flex justify-content-center flex-wrap gap-2">
+                                                @if (reserva.Estado != "cancelada" &&
+                                                     reserva.Contrato is null)
+                                                {
+                                                    <button type="button"
+                                                            class="btn btn-outline-primary btn-sm"
+                                                            @onclick="() => EditarReservaAsync(reserva.IdReserva)">
+                                                        <i class="bi bi-pencil-square me-1"></i>
+                                                        Editar
+                                                    </button>
+
+                                                    <button type="button"
+                                                            class="btn btn-outline-danger btn-sm"
+                                                            @onclick="() => CancelarReservaAsync(reserva.IdReserva)">
+                                                        <i class="bi bi-x-circle me-1"></i>
+                                                        Cancelar
+                                                    </button>
+                                                }
+                                                else if (reserva.Contrato is not null)
+                                                {
+                                                    <span class="badge bg-info-subtle text-info rounded-pill px-3 py-2">
+                                                        <i class="bi bi-file-earmark-text me-1"></i>
+                                                        Tiene contrato
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-secondary small">
+                                                        Cancelada
+                                                    </span>
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Reserva> reservas = new();
+    private List<Cliente> clientes = new();
+    private List<Categoria> categorias = new();
+    private List<Sucursal> sucursales = new();
+    private List<Usuario> usuarios = new();
+    private List<Vehiculo> vehiculosDisponibles = new();
+
+    private Reserva formulario = CrearFormulario();
+
+    private bool Cargando = true;
+    private bool Guardando;
+    private bool mensajeError;
+    private string mensaje = "";
+    private int versionMensaje;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await CargarDatosAsync();
+        }
+        catch (Exception)
+        {
+            await MostrarMensajeAsync(
+                "No se pudieron cargar los datos. Verifica la conexión con la base de datos.",
+                true);
+        }
+        finally
+        {
+            Cargando = false;
+        }
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        clientes = await Db.Cliente
+            .AsNoTracking()
+            .OrderBy(c => c.Nombre)
+            .ThenBy(c => c.Apellido)
+            .ToListAsync();
+
+        categorias = await Db.Categoria
+            .AsNoTracking()
+            .OrderBy(c => c.Nombre)
+            .ToListAsync();
+
+        sucursales = await Db.Sucursal
+            .AsNoTracking()
+            .OrderBy(s => s.Nombre)
+            .ToListAsync();
+
+        usuarios = await Db.Usuario
+            .AsNoTracking()
+            .OrderBy(u => u.NombreCompleto)
+            .ToListAsync();
+
+        reservas = await Db.Reserva
+            .AsNoTracking()
+            .Include(r => r.IdClienteNavigation)
+            .Include(r => r.IdCategoriaNavigation)
+            .Include(r => r.IdSucursalNavigation)
+            .Include(r => r.IdUsuarioNavigation)
+            .Include(r => r.IdVehiculoNavigation)
+            .Include(r => r.Contrato)
+            .OrderByDescending(r => r.FechaCreacion)
+            .ToListAsync();
+
+        await ActualizarVehiculosDisponiblesAsync();
+    }
+
+    private static Reserva CrearFormulario()
+    {
+        return new Reserva
+        {
+            FechaInicio = DateTime.Today,
+            FechaFin = DateTime.Today.AddDays(1),
+            Estado = "confirmada"
+        };
+    }
+
+    // DISPONIBILIDAD: cálculo por categoría y rango de fechas.
+    private async Task<List<Vehiculo>> ObtenerVehiculosDisponiblesAsync(
+        int idCategoria,
+        DateTime fechaInicio,
+        DateTime fechaFin,
+        int? idReservaExcluir = null)
+    {
+        if (idCategoria <= 0 || fechaFin <= fechaInicio)
+        {
+            return new List<Vehiculo>();
+        }
+
+        var inicio = fechaInicio;
+        var fin = fechaFin;
+
+        // 1. Vehículos activos de la categoría seleccionada.
+        var vehiculosCategoria = await Db.Vehiculo
+            .AsNoTracking()
+            .Where(v =>
+                v.IdCategoria == idCategoria &&
+                v.Estado == "activo")
+            .OrderBy(v => v.Matricula)
+            .ToListAsync();
+
+        if (vehiculosCategoria.Count == 0)
+        {
+            return new List<Vehiculo>();
+        }
+
+        var idsVehiculos = vehiculosCategoria
+            .Select(v => v.IdVehiculo)
+            .ToList();
+
+        // 2. Reservas confirmadas que se cruzan con el período.
+        // Se excluye la reserva que se está modificando.
+        // Una reserva con contrato se controla mediante el contrato.
+        var reservasSuperpuestas = await Db.Reserva
+            .AsNoTracking()
+            .Where(r =>
+                r.Estado == "confirmada" &&
+                r.FechaInicio < fin &&
+                r.FechaFin > inicio &&
+                (!idReservaExcluir.HasValue ||
+                 r.IdReserva != idReservaExcluir.Value) &&
+                r.Contrato == null)
+            .Select(r => new
+            {
+                r.IdReserva,
+                r.IdCategoria,
+                r.IdVehiculo
+            })
+            .ToListAsync();
+
+        // 3. Vehículos asignados a reservas confirmadas.
+        var vehiculosReservados = reservasSuperpuestas
+            .Where(r => r.IdVehiculo.HasValue)
+            .Select(r => r.IdVehiculo!.Value)
+            .ToHashSet();
+
+        // 4. Reservas confirmadas de la categoría sin vehículo asignado.
+        var reservasSinVehiculo = reservasSuperpuestas
+            .Count(r =>
+                r.IdCategoria == idCategoria &&
+                r.IdVehiculo == null);
+
+        // 5. Contratos abiertos que se cruzan con el período.
+        var vehiculosConContrato = await Db.Contrato
+            .AsNoTracking()
+            .Where(c =>
+                c.Estado == "abierto" &&
+                c.FechaInicio < fin &&
+                c.FechaFinPactada > inicio &&
+                idsVehiculos.Contains(c.IdVehiculo))
+            .Select(c => c.IdVehiculo)
+            .Distinct()
+            .ToListAsync();
+
+        foreach (var id in vehiculosConContrato)
+        {
+            vehiculosReservados.Add(id);
+        }
+
+        // 6. Mantenimientos en curso que se cruzan con el período.
+        var mantenimientos = await Db.Mantenimiento
+            .AsNoTracking()
+            .Where(m =>
+                m.Estado == "en_curso" &&
+                idsVehiculos.Contains(m.IdVehiculo))
+            .ToListAsync();
+
+        var fechaInicioDateOnly = DateOnly.FromDateTime(inicio);
+        var fechaFinDateOnly = DateOnly.FromDateTime(fin);
+
+        foreach (var mantenimiento in mantenimientos)
+        {
+            bool seCruzaConElPeriodo =
+                mantenimiento.FechaInicio <= fechaFinDateOnly &&
+                (!mantenimiento.FechaFin.HasValue ||
+                 mantenimiento.FechaFin.Value >= fechaInicioDateOnly);
+
+            if (seCruzaConElPeriodo)
+            {
+                vehiculosReservados.Add(mantenimiento.IdVehiculo);
+            }
+        }
+
+        // 7. Vehículos sin contratos, reservas asignadas ni mantenimientos.
+        var libres = vehiculosCategoria
+            .Where(v => !vehiculosReservados.Contains(v.IdVehiculo))
+            .ToList();
+
+        // 8. Reservar capacidad para las reservas sin vehículo asignado.
+        var cantidadDisponible =
+            Math.Max(0, libres.Count - reservasSinVehiculo);
+
+        return libres
+            .Take(cantidadDisponible)
+            .ToList();
+    }
+
+    private async Task ActualizarVehiculosDisponiblesAsync()
+    {
+        vehiculosDisponibles = await ObtenerVehiculosDisponiblesAsync(
+            formulario.IdCategoria,
+            formulario.FechaInicio,
+            formulario.FechaFin,
+            formulario.IdReserva > 0 ? formulario.IdReserva : null);
+
+        if (formulario.IdVehiculo.HasValue &&
+            !vehiculosDisponibles.Any(v =>
+                v.IdVehiculo == formulario.IdVehiculo.Value))
+        {
+            formulario.IdVehiculo = null;
+        }
+    }
+
+    private async Task GuardarReservaAsync()
+    {
+        if (Guardando)
+        {
+            return;
+        }
+
+        Guardando = true;
+
+        try
+        {
+            if (formulario.FechaFin <= formulario.FechaInicio)
+            {
+                await MostrarMensajeAsync(
+                    "La fecha de finalización debe ser posterior a la fecha de inicio.",
+                    true);
+                return;
+            }
+
+            var clienteActivo = await Db.Cliente.AnyAsync(c =>
+                c.IdCliente == formulario.IdCliente &&
+                c.Estado == "activo");
+
+            if (!clienteActivo)
+            {
+                await MostrarMensajeAsync(
+                    "Debes seleccionar un cliente activo.", true);
+                return;
+            }
+
+            if (!await Db.Categoria.AnyAsync(c =>
+                c.IdCategoria == formulario.IdCategoria))
+            {
+                await MostrarMensajeAsync(
+                    "Debes seleccionar una categoría válida.", true);
+                return;
+            }
+
+            if (!await Db.Sucursal.AnyAsync(s =>
+                s.IdSucursal == formulario.IdSucursal && s.Activa))
+            {
+                await MostrarMensajeAsync(
+                    "Debes seleccionar una sucursal activa.", true);
+                return;
+            }
+
+            if (!await Db.Usuario.AnyAsync(u =>
+                u.IdUsuario == formulario.IdUsuario && u.Activo))
+            {
+                await MostrarMensajeAsync(
+                    "Debes seleccionar un usuario activo.", true);
+                return;
+            }
+
+            Reserva? reservaExistente = null;
+
+            if (formulario.IdReserva > 0)
+            {
+                reservaExistente = await Db.Reserva
+                    .Include(r => r.Contrato)
+                    .FirstOrDefaultAsync(r =>
+                        r.IdReserva == formulario.IdReserva);
+
+                if (reservaExistente is null)
+                {
+                    await MostrarMensajeAsync(
+                        "No se encontró la reserva que intentas modificar.", true);
+                    return;
+                }
+
+                if (reservaExistente.Contrato is not null)
+                {
+                    await MostrarMensajeAsync(
+                        "No puedes modificar una reserva que ya tiene contrato.", true);
+                    return;
+                }
+
+                if (reservaExistente.Estado == "cancelada")
+                {
+                    await MostrarMensajeAsync(
+                        "No puedes modificar una reserva cancelada.", true);
+                    return;
+                }
+            }
+
+            // Volver a verificar la disponibilidad antes de guardar.
+            var disponibles = await ObtenerVehiculosDisponiblesAsync(
+                formulario.IdCategoria,
+                formulario.FechaInicio,
+                formulario.FechaFin,
+                formulario.IdReserva > 0 ? formulario.IdReserva : null);
+
+            if (disponibles.Count == 0)
+            {
+                await MostrarMensajeAsync(
+                    "No hay vehículos disponibles en esa categoría para las fechas seleccionadas.",
+                    true);
+                return;
+            }
+
+            if (formulario.IdVehiculo.HasValue &&
+                !disponibles.Any(v =>
+                    v.IdVehiculo == formulario.IdVehiculo.Value))
+            {
+                await MostrarMensajeAsync(
+                    "El vehículo seleccionado ya no está disponible. Selecciona otro.",
+                    true);
+                return;
+            }
+
+            bool esNuevaReserva = reservaExistente is null;
+
+            if (esNuevaReserva)
+            {
+                var nuevaReserva = new Reserva
+                {
+                    IdCliente = formulario.IdCliente,
+                    IdCategoria = formulario.IdCategoria,
+                    IdVehiculo = formulario.IdVehiculo,
+                    IdSucursal = formulario.IdSucursal,
+                    IdUsuario = formulario.IdUsuario,
+                    FechaInicio = formulario.FechaInicio,
+                    FechaFin = formulario.FechaFin,
+                    Estado = "confirmada",
+                    Observaciones = formulario.Observaciones,
+                    FechaCreacion = DateTime.Now
+                };
+
+                Db.Reserva.Add(nuevaReserva);
+            }
+            else
+            {
+                reservaExistente!.IdCliente = formulario.IdCliente;
+                reservaExistente.IdCategoria = formulario.IdCategoria;
+                reservaExistente.IdVehiculo = formulario.IdVehiculo;
+                reservaExistente.IdSucursal = formulario.IdSucursal;
+                reservaExistente.IdUsuario = formulario.IdUsuario;
+                reservaExistente.FechaInicio = formulario.FechaInicio;
+                reservaExistente.FechaFin = formulario.FechaFin;
+                reservaExistente.Observaciones = formulario.Observaciones;
+            }
+
+            await Db.SaveChangesAsync();
+
+            formulario = CrearFormulario();
+            await CargarDatosAsync();
+
+            await MostrarMensajeAsync(
+                esNuevaReserva
+                    ? "Reserva registrada correctamente."
+                    : "Reserva modificada correctamente.");
+        }
+        catch (DbUpdateException)
+        {
+            await MostrarMensajeAsync(
+                "No se pudo guardar la reserva. Verifica los datos y las relaciones de la base de datos.",
+                true);
+        }
+        catch (Exception)
+        {
+            await MostrarMensajeAsync(
+                "Ocurrió un error al guardar la reserva.", true);
+        }
+        finally
+        {
+            Guardando = false;
+        }
+    }
+
+    private async Task EditarReservaAsync(int idReserva)
+    {
+        var reserva = await Db.Reserva
+            .AsNoTracking()
+            .Include(r => r.Contrato)
+            .FirstOrDefaultAsync(r => r.IdReserva == idReserva);
+
+        if (reserva is null)
+        {
+            await MostrarMensajeAsync("No se encontró la reserva.", true);
+            return;
+        }
+
+        if (reserva.Contrato is not null ||
+            reserva.Estado == "cancelada")
+        {
+            await MostrarMensajeAsync(
+                "Esta reserva no se puede modificar porque está cancelada o ya tiene contrato.",
+                true);
+            return;
+        }
+
+        formulario = new Reserva
+        {
+            IdReserva = reserva.IdReserva,
+            IdCliente = reserva.IdCliente,
+            IdCategoria = reserva.IdCategoria,
+            IdVehiculo = reserva.IdVehiculo,
+            IdSucursal = reserva.IdSucursal,
+            IdUsuario = reserva.IdUsuario,
+            FechaInicio = reserva.FechaInicio,
+            FechaFin = reserva.FechaFin,
+            Estado = reserva.Estado,
+            Observaciones = reserva.Observaciones,
+            FechaCreacion = reserva.FechaCreacion
+        };
+
+        await ActualizarVehiculosDisponiblesAsync();
+        await MostrarMensajeAsync($"Modificando la reserva n.º {idReserva}.");
+    }
+
+    private async Task CancelarReservaAsync(int idReserva)
+    {
+        try
+        {
+            var reserva = await Db.Reserva
+                .Include(r => r.Contrato)
+                .FirstOrDefaultAsync(r => r.IdReserva == idReserva);
+
+            if (reserva is null)
+            {
+                await MostrarMensajeAsync("No se encontró la reserva.", true);
+                return;
+            }
+
+            if (reserva.Contrato is not null)
+            {
+                await MostrarMensajeAsync(
+                    "No puedes cancelar una reserva que ya fue convertida en contrato.",
+                    true);
+                return;
+            }
+
+            if (reserva.Estado == "cancelada")
+            {
+                await MostrarMensajeAsync(
+                    "La reserva ya está cancelada.", true);
+                return;
+            }
+
+            reserva.Estado = "cancelada";
+            await Db.SaveChangesAsync();
+
+            if (formulario.IdReserva == idReserva)
+            {
+                formulario = CrearFormulario();
+            }
+
+            await CargarDatosAsync();
+            await MostrarMensajeAsync("Reserva cancelada correctamente.");
+        }
+        catch (Exception)
+        {
+            await MostrarMensajeAsync(
+                "No se pudo cancelar la reserva.", true);
+        }
+    }
+
+    private void CancelarEdicion()
+    {
+        formulario = CrearFormulario();
+        vehiculosDisponibles.Clear();
+        mensaje = "";
+    }
+
+    private async Task MostrarMensajeAsync(
+        string texto,
+        bool error = false)
+    {
+        int versionActual = ++versionMensaje;
+
+        mensaje = texto;
+        mensajeError = error;
+
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(3500);
+
+        if (versionActual == versionMensaje)
+        {
+            mensaje = "";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+}
