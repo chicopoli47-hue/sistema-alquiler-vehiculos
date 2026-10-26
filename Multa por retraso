@@ -1,0 +1,72 @@
+using System;
+using System.Collections.Generic;
+
+public class Vehiculo
+{
+    public string Modelo { get; set; }
+    public string Placa { get; set; }
+    public decimal PrecioPorDia { get; set; }
+    public int KilometrajePermitido { get; set; }
+}
+
+public class Cliente
+{
+    public string Nombre { get; set; }
+    public string Email { get; set; }
+}
+
+public class Alquiler
+{
+    public Cliente Cliente { get; set; }
+    public Vehiculo Vehiculo { get; set; }
+    public DateTime FechaInicio { get; set; }
+    public DateTime FechaFin { get; set; }
+    public int KilometrajeUsado { get; set; }
+    public decimal MultaTotal { get; private set; }
+
+    public void CalcularMultas()
+    {
+        
+        if (FechaFin > DateTime.Now)
+        {
+            int diasRetraso = (FechaFin - DateTime.Now).Days;
+            MultaTotal += diasRetraso * 50; // $50 por día de retraso
+        }
+
+        if (KilometrajeUsado > Vehiculo.KilometrajePermitido)
+        {
+            int kilometrosExcedidos = KilometrajeUsado - Vehiculo.KilometrajePermitido;
+            MultaTotal += kilometrosExcedidos * 0.20m; // $0.20 por cada kilómetro adicional
+        }
+
+    }
+
+    public void NotificarMulta()
+    {
+        Console.WriteLine($"Estimado {Cliente.Nombre},");
+        Console.WriteLine($"Usted tiene una multa total de: ${MultaTotal}");
+        Console.WriteLine("Por favor, realice el pago a la brevedad.");
+    }
+}
+
+public class Programa
+{
+    public static void Main(string[] args)
+    {
+        // Ejemplo de uso
+        var cliente = new Cliente { Nombre = "Juan Pérez", Email = "juan.perez@example.com" };
+        var vehiculo = new Vehiculo { Modelo = "Toyota Corolla", Placa = "ABC123", PrecioPorDia = 30, KilometrajePermitido = 100 };
+        
+        var alquiler = new Alquiler
+        {
+            Cliente = cliente,
+            Vehiculo = vehiculo,
+            FechaInicio = DateTime.Now.AddDays(-5),
+            FechaFin = DateTime.Now.AddDays(-2),
+            KilometrajeUsado = 120
+        };
+
+        alquiler.CalcularMultas();
+        alquiler.NotificarMulta();
+    }
+}
